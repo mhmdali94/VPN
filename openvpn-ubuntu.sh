@@ -547,9 +547,8 @@ esac
 # Append remaining server settings
 cat >> /etc/openvpn/server.conf <<EOF
 keepalive 10 120
-cipher AES-256-CBC
-compress lz4-v2
-push "compress lz4-v2"
+data-ciphers AES-256-GCM:AES-128-GCM:AES-256-CBC
+data-ciphers-fallback AES-256-CBC
 user nobody
 group $GROUPNAME
 persist-key
@@ -658,8 +657,8 @@ persist-key
 persist-tun
 remote-cert-tls server
 auth SHA512
-cipher AES-256-CBC
-compress lz4-v2
+data-ciphers AES-256-GCM:AES-128-GCM:AES-256-CBC
+data-ciphers-fallback AES-256-CBC
 setenv opt block-outside-dns
 key-direction 1
 verb 3

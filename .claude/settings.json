@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/macbook-pro/Desktop/Development/VPN/VPN/wireguard-ubuntu.sh)"
+    ]
+  }
+}
