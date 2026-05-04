@@ -82,7 +82,7 @@ run_with_spinner() {
 # ─────────────────────────────────────────────
 
 # Detect Debian users running the script with "sh" instead of bash
-if readlink /proc/$$/exe | grep -qs "dash"; then
+if readlink /proc/$$/exe 2>/dev/null | grep -qs "dash"; then
 	err "This script needs to be run with bash, not sh"
 	exit 1
 fi
@@ -142,8 +142,8 @@ newclient () {
 # I do this to make the script compatible with NATed servers (lowendspirit.com)
 # and to avoid getting an IPv6.
 IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
-if [[ "$IP" = "" ]]; then
-	IP=$(wget -4qO- "http://whatismyip.akamai.com/")
+if [[ -z "$IP" ]]; then
+	IP=$(wget -4qO- "https://api.ipify.org" 2>/dev/null || wget -4qO- "https://checkip.amazonaws.com" 2>/dev/null | tr -d '\n')
 fi
 
 # ─────────────────────────────────────────────
@@ -495,7 +495,7 @@ cp pki/ca.crt pki/private/ca.key pki/dh.pem pki/issued/server.crt pki/private/se
 chown nobody:$GROUPNAME /etc/openvpn/crl.pem
 
 # Generate TLS auth key
-openvpn --genkey secret /etc/openvpn/ta.key
+openvpn --genkey --secret /etc/openvpn/ta.key
 
 # Generate server.conf
 cat > /etc/openvpn/server.conf <<EOF
@@ -612,14 +612,15 @@ fi
 info "Starting OpenVPN service..."
 if [[ "$OS" = 'debian' ]]; then
 	if pgrep systemd-journal; then
+		systemctl enable openvpn@server.service
 		systemctl restart openvpn@server.service
 	else
 		/etc/init.d/openvpn restart
 	fi
 else
 	if pgrep systemd-journal; then
-		systemctl restart openvpn@server.service
 		systemctl enable openvpn@server.service
+		systemctl restart openvpn@server.service
 	else
 		service openvpn restart
 		chkconfig openvpn on
@@ -628,7 +629,7 @@ fi
 ok "OpenVPN service started"
 
 # Detect NAT
-EXTERNALIP=$(wget -4qO- "http://whatismyip.akamai.com/")
+EXTERNALIP=$(wget -4qO- "https://api.ipify.org" 2>/dev/null || wget -4qO- "https://checkip.amazonaws.com" 2>/dev/null | tr -d '\n')
 if [[ "$IP" != "$EXTERNALIP" ]]; then
 	echo ""
 	echo -e "  ${YELLOW}${BOLD}⚠  NAT Detected!${NC}"

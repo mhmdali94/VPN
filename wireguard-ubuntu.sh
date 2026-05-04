@@ -72,7 +72,7 @@ run_with_spinner() {
 # ─────────────────────────────────────────────
 #  Preflight Checks
 # ─────────────────────────────────────────────
-if readlink /proc/$$/exe | grep -qs "dash"; then
+if readlink /proc/$$/exe 2>/dev/null | grep -qs "dash"; then
 	err "This script needs to be run with bash, not sh"
 	exit 1
 fi
@@ -97,7 +97,7 @@ fi
 # Detect local IP and primary NIC
 IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -o -E '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
 if [[ -z "$IP" ]]; then
-	IP=$(wget -4qO- "http://whatismyip.akamai.com/")
+	IP=$(wget -4qO- "https://api.ipify.org" 2>/dev/null || wget -4qO- "https://checkip.amazonaws.com" 2>/dev/null | tr -d '\n')
 fi
 NIC=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
 
@@ -506,8 +506,20 @@ if [[ "$OS" = 'debian' ]]; then
 	run_with_spinner "Updating package lists..." apt-get update
 	run_with_spinner "Installing WireGuard & tools..." apt-get install -y wireguard wireguard-tools qrencode
 else
+	# Detect CentOS/RHEL major version
+	CENTOS_VER=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null | cut -d. -f1)
+	[[ -z "$CENTOS_VER" ]] && CENTOS_VER=$(rpm -q --queryformat '%{VERSION}' redhat-release 2>/dev/null | cut -d. -f1)
 	run_with_spinner "Installing EPEL release..." yum install -y epel-release
-	run_with_spinner "Installing WireGuard & tools..." yum install -y wireguard-tools qrencode
+	if [[ "$CENTOS_VER" -le 7 ]]; then
+		# CentOS 7 needs ELRepo for the kernel module
+		run_with_spinner "Installing ELRepo (WireGuard kernel module)..." bash -c "
+		yum install -y https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm &>/dev/null
+		yum install -y --enablerepo=elrepo-kernel kmod-wireguard wireguard-tools
+		"
+	else
+		run_with_spinner "Installing WireGuard & tools..." yum install -y wireguard-tools
+	fi
+	yum install -y qrencode &>/dev/null || true
 fi
 
 mkdir -p /etc/wireguard
@@ -564,7 +576,7 @@ ok "WireGuard service started"
 
 # Detect NAT
 SERVER_PUB_IP=$IP
-EXTERNALIP=$(wget -4qO- "http://whatismyip.akamai.com/")
+EXTERNALIP=$(wget -4qO- "https://api.ipify.org" 2>/dev/null || wget -4qO- "https://checkip.amazonaws.com" 2>/dev/null | tr -d '\n')
 if [[ "$IP" != "$EXTERNALIP" ]]; then
 	echo ""
 	echo -e "  ${YELLOW}${BOLD}⚠  NAT Detected!${NC}"
@@ -583,7 +595,7 @@ SERVER_PUB_IP=$SERVER_PUB_IP
 SERVER_PORT=$SERVER_PORT
 SERVER_PUB_KEY=$SERVER_PUB_KEY
 SERVER_PUB_NIC=$NIC
-SERVER_DNS=$DNS_IPS
+SERVER_DNS="$DNS_IPS"
 EOF
 chmod 600 "$PARAMS_FILE"
 
